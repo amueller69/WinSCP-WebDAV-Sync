@@ -8,18 +8,23 @@ using System.Threading.Tasks;
 
 namespace WinSCPSync
 {
-    class WinSCPSync : ISynchronizer
+    interface ISynchronizer
     {
-        public WinSCPSyncOptions Options { get; set; }
+        void Sync();
+    }
 
-        public WinSCPSync(IDictionary<string, string> options)
+    class Synchronizer : ISynchronizer
+    {
+        public SynchronizerOptions Options { get; set; }
+
+        public Synchronizer(IDictionary<string, string> options)
         {
             try
             {
                 string temp;
                 byte[] bytes = Encoding.UTF8.GetBytes(options["Password"]);
                 ProtectedMemory.Protect(bytes, MemoryProtectionScope.SameProcess);
-                Options = new WinSCPSyncOptions
+                Options = new SynchronizerOptions
                 {
                     Username = options["Username"],
                     Password = bytes,

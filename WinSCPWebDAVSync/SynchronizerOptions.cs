@@ -1,8 +1,6 @@
-﻿using WinSCP;
-
-namespace WinSCPSync
+﻿namespace WinSCPSync
 {
-    class WinSCPSyncOptions
+    class SynchronizerOptions
     {
         public string Username { get; set; }
         public byte[] Password { get; set; }
