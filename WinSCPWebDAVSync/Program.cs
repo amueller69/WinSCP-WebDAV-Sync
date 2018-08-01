@@ -2,12 +2,13 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading;
+using System.Threading.Tasks;
 using System.Configuration;
 using System.Security.Cryptography;
 using WinSCP;
 using System.IO;
 using System.Collections.Specialized;
+using System.Threading;
 
 namespace WinSCPSync
 {
@@ -31,7 +32,11 @@ namespace WinSCPSync
             byte[] bytes = DecryptValue(configDict["Password"], entropy);
             configDict["Password"] = Encoding.UTF8.GetString(bytes);
             var winscp = new WinSCPSync(configDict);
-            winscp.Sync();
+            var monitor = new DirectoryMonitor(configDict["LocalDirectory"], winscp);
+            monitor.StartMonitoring();
+            while (Console.Read() != 'q') ;
+            monitor.StopMonitoring();
+            Console.WriteLine("Ending");
         }
 
         static void InitializeConfig()
@@ -50,6 +55,7 @@ namespace WinSCPSync
             config.AppSettings.Settings.Add("Secret", encryptedSecret);
             config.AppSettings.Settings["Password"].Value = encrypted;
             config.Save(ConfigurationSaveMode.Modified);
+            ConfigurationManager.RefreshSection("appSettings");
         }
 
         static string EncryptValue(byte[] unencrypted, byte[] entropy)
