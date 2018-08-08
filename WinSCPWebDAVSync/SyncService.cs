@@ -1,9 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Configuration;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 
 namespace WinSCPSync
@@ -34,13 +33,11 @@ namespace WinSCPSync
 
         public void Start()
         {
-            //Log starting;
             _monitor.StartMonitoring();
         }
 
         public void Stop()
         {
-            //Log stoping;
             _monitor.StopMonitoring();
         }
 

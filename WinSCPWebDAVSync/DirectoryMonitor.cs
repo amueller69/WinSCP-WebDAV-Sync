@@ -1,10 +1,8 @@
 ﻿using System;
 using System.IO;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
+using Topshelf.Logging;
 
 namespace WinSCPSync
 {
@@ -14,14 +12,16 @@ namespace WinSCPSync
         private ISynchronizer _synchronizer;
         private FileSystemWatcher _monitor;
         private CancellationTokenSource _canceler;
-        private bool _watching = true; 
- 
+        private bool _watching = true;
+        private readonly LogWriter _logger;
+
 
         public DirectoryMonitor(string filepath, ISynchronizer sync)
         {
             Directory = filepath;
             _synchronizer = sync;
             _canceler = new CancellationTokenSource();
+            _logger = HostLogger.Get<DirectoryMonitor>();
             _monitor = new FileSystemWatcher(filepath)
             {
                 IncludeSubdirectories = true,
@@ -35,9 +35,9 @@ namespace WinSCPSync
 
         private void OnChange(object source, FileSystemEventArgs e)
         {
-            Console.Write("Change detected!");
             if (!HasChanged)
             {
+                _logger.Info("Change detected! Directory marked for immediate synchronization.");
                 HasChanged = true;
             }
         }
@@ -54,11 +54,11 @@ namespace WinSCPSync
                         Task.Run((Action)_synchronizer.Sync, _canceler.Token);
                         HasChanged = false;
                     }
-                    await Task.Delay(3000, _canceler.Token);
+                    await Task.Delay(60000, _canceler.Token);
                 }
             } catch (TaskCanceledException)
             {
-                Console.WriteLine("Task cancelled");
+                _logger.Warn("Task cancelled!");
             }
         }
 

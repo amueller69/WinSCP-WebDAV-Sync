@@ -1,23 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Configuration;
-using System.Security.Cryptography;
-using System.ServiceProcess;
-using WinSCP;
-using Topshelf;
-using System.IO;
-using System.Collections.Specialized;
-using System.Threading;
-
+﻿using Topshelf;
+using NLog;
 namespace WinSCPSync
 {
     class Program
     {
         static void Main(string[] args)
         {
+            LogManager.LoadConfiguration("NLog.config");
+            var factory = new LogFactory(LogManager.Configuration);
             HostFactory.Run(x =>
             {
                 x.Service<SyncService>(service =>
@@ -33,7 +23,7 @@ namespace WinSCPSync
                 x.SetServiceName("WinSCPSyncSvc");
                 x.RunAsNetworkService();
                 x.StartAutomatically();
-                x.DependsOnEventLog();
+                x.UseNLog(factory);
             });
         }
     }

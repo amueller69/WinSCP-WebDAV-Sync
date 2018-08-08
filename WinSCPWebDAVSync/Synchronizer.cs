@@ -1,10 +1,9 @@
-﻿using System;
+﻿using WinSCP;
+using System;
 using System.Text;
-using System.Threading;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using WinSCP;
-using System.Threading.Tasks;
+using Topshelf.Logging;
 
 namespace WinSCPSync
 {
@@ -16,9 +15,12 @@ namespace WinSCPSync
     class Synchronizer : ISynchronizer
     {
         public SynchronizerOptions Options { get; set; }
+        private LogWriter _logger;
 
         public Synchronizer(IDictionary<string, string> options)
         {
+            _logger = HostLogger.Get<DirectoryMonitor>();
+
             try
             {
                 string temp;
@@ -40,33 +42,42 @@ namespace WinSCPSync
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                _logger.Error(e.ToString());
             }
         }
 
         public void Sync()
         {
-            using (Session session = new Session())
+            try
             {
-                byte[] pw = new byte[Options.Password.Length];
-                Options.Password.CopyTo(pw, 0);
-                ProtectedMemory.Unprotect(pw, MemoryProtectionScope.SameProcess);
-                SessionOptions options = new SessionOptions
+                _logger.Info(String.Format("Beginning synchronization of {0}", Options.LocalDirectory));
+                using (Session session = new Session())
                 {
-                    UserName = Options.Username,
-                    Password = Encoding.UTF8.GetString(pw),
-                    HostName = Options.Hostname,
-                    PortNumber = 443,
-                    Protocol = Protocol.Webdav,
-                    WebdavSecure = true
-                };
+                    byte[] pw = new byte[Options.Password.Length];
+                    Options.Password.CopyTo(pw, 0);
+                    ProtectedMemory.Unprotect(pw, MemoryProtectionScope.SameProcess);
+                    SessionOptions options = new SessionOptions
+                    {
+                        UserName = Options.Username,
+                        Password = Encoding.UTF8.GetString(pw),
+                        HostName = Options.Hostname,
+                        PortNumber = 443,
+                        Protocol = Protocol.Webdav,
+                        WebdavSecure = true
+                    };
 
-                session.Open(options);
-                SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Remote,
-                    Options.LocalDirectory, Options.RemoteDirectory, false);
+                    session.Open(options);
+                    SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Remote,
+                        Options.LocalDirectory, Options.RemoteDirectory, false);
+                }
+
+                _logger.Info("File sync complete!");
+            }
+            catch (Exception e)
+            {
+                _logger.Error(e.ToString());
             }
 
-            Console.WriteLine("File sync complete!");
         }
     }
 }
