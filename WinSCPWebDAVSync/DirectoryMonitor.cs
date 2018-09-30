@@ -51,7 +51,7 @@ namespace WinSCPSync
                 {
                     if (HasChanged)
                     {
-                        Task.Run((Action)_synchronizer.Sync, _canceler.Token);
+                        await Task.Run((Action)_synchronizer.Sync, _canceler.Token);
                         HasChanged = false;
                     }
                     await Task.Delay(60000, _canceler.Token);
@@ -66,7 +66,7 @@ namespace WinSCPSync
         {
             _canceler.Cancel();
             _watching = false;
-            _monitor.EnableRaisingEvents = true;
+            _monitor.EnableRaisingEvents = false;
         } 
 
     }

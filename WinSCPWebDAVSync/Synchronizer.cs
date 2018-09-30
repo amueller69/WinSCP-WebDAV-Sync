@@ -19,7 +19,7 @@ namespace WinSCPSync
 
         public Synchronizer(IDictionary<string, string> options)
         {
-            _logger = HostLogger.Get<DirectoryMonitor>();
+            _logger = HostLogger.Get<Synchronizer>();
 
             try
             {
@@ -66,18 +66,30 @@ namespace WinSCPSync
                         WebdavSecure = true
                     };
 
+                    session.FileTransferred += ResultHandler;
                     session.Open(options);
                     SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Remote,
                         Options.LocalDirectory, Options.RemoteDirectory, false);
                 }
-
-                _logger.Info("File sync complete!");
             }
             catch (Exception e)
             {
                 _logger.Error(e.ToString());
             }
 
+        }
+        private static void ResultHandler(object sender, TransferEventArgs e)
+        {
+            LogWriter logger = HostLogger.Get<Synchronizer>();
+
+            if (e.Error == null)
+            {
+                logger.Info("File sync complete!");
+            }
+            else
+            {
+                logger.Error(String.Format("Upload of {0} failed: {1}", e.FileName, e.Error));
+            }
         }
     }
 }

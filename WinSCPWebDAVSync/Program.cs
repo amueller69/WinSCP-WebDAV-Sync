@@ -1,12 +1,16 @@
 ﻿using Topshelf;
 using NLog;
+using System.Configuration;
+
 namespace WinSCPSync
 {
     class Program
     {
         static void Main(string[] args)
         {
-            LogManager.LoadConfiguration("NLog.config");
+            string path = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)
+                .FilePath;
+            LogManager.LoadConfiguration(path);
             var factory = new LogFactory(LogManager.Configuration);
             HostFactory.Run(x =>
             {
