@@ -1,5 +1,6 @@
 ﻿using Topshelf;
 using NLog;
+using System;
 using System.Configuration;
 
 namespace WinSCPSync
@@ -12,23 +13,28 @@ namespace WinSCPSync
                 .FilePath;
             LogManager.LoadConfiguration(path);
             var factory = new LogFactory(LogManager.Configuration);
-            HostFactory.Run(x =>
+            var logger = factory.GetCurrentClassLogger();
+            logger.Debug("Loaded Config");
+            var hf = HostFactory.Run(x =>
             {
                 x.Service<SyncService>(service =>
                 {
-                    service.ConstructUsing(_ => new SyncService());
+                    service.ConstructUsing(name => new SyncService());
                     service.WhenStarted(svc => svc.Start());
                     service.WhenStopped(svc => svc.Stop());
-                    service.WhenShutdown(svc => svc.Stop());
+                    logger.Debug("Init service");
                 });
 
+                x.RunAsLocalSystem();
                 x.SetDescription("WinSCP WebDAV Synchronization Service");
                 x.SetDisplayName("WinSCPSyncSvc");
                 x.SetServiceName("WinSCPSyncSvc");
-                x.RunAsNetworkService();
-                x.StartAutomatically();
                 x.UseNLog(factory);
+                logger.Debug("Configured service");
             });
+
+            var exitCode = (int)Convert.ChangeType(hf, hf.GetTypeCode());
+            Environment.ExitCode = exitCode;
         }
     }
 }
