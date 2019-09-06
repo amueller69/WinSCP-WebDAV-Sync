@@ -1,4 +1,5 @@
 ﻿using System;
+using WinSCP;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -51,7 +52,7 @@ namespace WinSCPSync
                 {
                     if (HasChanged)
                     {
-                        await Task.Run((Action)_synchronizer.Sync, _canceler.Token);
+                        await Task.Run(_synchronizer.Sync, _canceler.Token);
                         HasChanged = false;
                     }
                     await Task.Delay(60000, _canceler.Token);
@@ -59,6 +60,9 @@ namespace WinSCPSync
             } catch (TaskCanceledException)
             {
                 _logger.Warn("Task cancelled!");
+            } catch (SessionException)
+            {
+                _logger.Error("File sync task failed due to server connection or authentication issue");
             }
         }
 

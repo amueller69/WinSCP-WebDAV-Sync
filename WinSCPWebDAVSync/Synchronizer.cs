@@ -20,37 +20,26 @@ namespace WinSCPSync
         public Synchronizer(IDictionary<string, string> options)
         {
             _logger = HostLogger.Get<Synchronizer>();
-
-            try
+            string temp;
+            byte[] bytes = Encoding.UTF8.GetBytes(options["Password"]);
+            ProtectedMemory.Protect(bytes, MemoryProtectionScope.SameProcess);
+            Options = new SynchronizerOptions
             {
-                string temp;
-                byte[] bytes = Encoding.UTF8.GetBytes(options["Password"]);
-                ProtectedMemory.Protect(bytes, MemoryProtectionScope.SameProcess);
-                Options = new SynchronizerOptions
-                {
-                    Username = options["Username"],
-                    Password = bytes,
-                    Hostname = options["Hostname"],
-                    LocalDirectory = options["LocalDirectory"],
-                    RemoteDirectory = (options.TryGetValue("RemoteDirectory", out temp) == true) ? temp : "/"
-                };
-
-                if (options.TryGetValue("ArchiveFiles", out temp))
-                {
-                    Options.ArchiveFiles = (temp.ToLower() == "true") ? true : false;
-                }
-            }
-            catch (Exception e)
-            {
-                _logger.Error(e.ToString());
-            }
+                Username = options["Username"],
+                Password = bytes,
+                Hostname = options["Hostname"],
+                LocalDirectory = options["LocalDirectory"],
+                RemoteDirectory = (options.TryGetValue("RemoteDirectory", out temp) == true) ? temp : "/"
+            };
+            _logger.Info("Performing initial synchronization task");
+            Sync();
         }
 
         public void Sync()
         {
             try
             {
-                _logger.Info(String.Format("Beginning synchronization of {0}", Options.LocalDirectory));
+                _logger.Info(string.Format("Beginning synchronization of {0}", Options.LocalDirectory));
                 using (Session session = new Session())
                 {
                     byte[] pw = new byte[Options.Password.Length];
@@ -72,9 +61,10 @@ namespace WinSCPSync
                         Options.LocalDirectory, Options.RemoteDirectory, false);
                 }
             }
-            catch (Exception e)
+            catch (SessionException e)
             {
-                _logger.Error(e.ToString());
+                _logger.Debug(e.ToString());
+                throw;
             }
 
         }

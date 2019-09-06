@@ -20,7 +20,7 @@ namespace WinSCPSync
                 x.Service<SyncService>(service =>
                 {
                     service.ConstructUsing(name => new SyncService());
-                    service.WhenStarted(svc => svc.Start());
+                    service.WhenStarted((svc, hc)=> svc.Start(hc));
                     service.WhenStopped(svc => svc.Stop());
                     logger.Debug("Init service");
                 });
@@ -30,7 +30,7 @@ namespace WinSCPSync
                 x.SetDisplayName("WinSCPSyncSvc");
                 x.SetServiceName("WinSCPSyncSvc");
                 x.UseNLog(factory);
-                logger.Debug("Configured service");
+                logger.Debug("Configured service host");
             });
 
             var exitCode = (int)Convert.ChangeType(hf, hf.GetTypeCode());
