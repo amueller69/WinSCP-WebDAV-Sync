@@ -72,7 +72,7 @@ namespace WinSCPSync
                 _logger.Error("Could not decrypt password. Clear the secret value and replace the password value in " +
                     "the config file in order to re-encrpyt password on next run.");
                 _control.Stop();
-            } catch (SessionException ex)
+            } catch (SessionException)
             {
                 _logger.Error("Failed to initialize connection to remote host. Verify config information");
                 _control.Stop();
