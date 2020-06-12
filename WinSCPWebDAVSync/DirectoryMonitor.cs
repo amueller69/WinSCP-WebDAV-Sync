@@ -14,6 +14,7 @@ namespace WinSCPSync
         private FileSystemWatcher _monitor;
         private CancellationTokenSource _canceler;
         private bool _watching = true;
+        private DateTime _last_refresh;
         private readonly LogWriter _logger;
 
 
@@ -23,6 +24,7 @@ namespace WinSCPSync
             _synchronizer = sync;
             _canceler = new CancellationTokenSource();
             _logger = HostLogger.Get<DirectoryMonitor>();
+            _last_refresh = DateTime.MinValue;
             _monitor = new FileSystemWatcher(filepath)
             {
                 IncludeSubdirectories = true,
@@ -50,9 +52,15 @@ namespace WinSCPSync
                 _monitor.EnableRaisingEvents = true;
                 while (_watching)
                 {
+                    if (TimeSpan.FromTicks(DateTime.Now.Ticks -_last_refresh.Ticks) > TimeSpan.FromMinutes(30))
+                    {
+                        await Task.Run(_synchronizer.Pull, _canceler.Token);
+                        _last_refresh = DateTime.Now;
+                    }
+
                     if (HasChanged)
                     {
-                        await Task.Run(_synchronizer.Sync, _canceler.Token);
+                        await Task.Run(_synchronizer.Push, _canceler.Token);
                         HasChanged = false;
                     }
                     await Task.Delay(60000, _canceler.Token);

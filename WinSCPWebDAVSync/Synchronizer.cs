@@ -9,7 +9,8 @@ namespace WinSCPSync
 {
     interface ISynchronizer
     {
-        void Sync();
+        void Push();
+        void Pull();
     }
 
     class Synchronizer : ISynchronizer
@@ -32,10 +33,10 @@ namespace WinSCPSync
                 RemoteDirectory = (options.TryGetValue("RemoteDirectory", out temp) == true) ? temp : "/"
             };
             _logger.Info("Performing initial synchronization task");
-            Sync();
+            Push();
         }
 
-        public void Sync()
+        public void Push()
         {
             try
             {
@@ -68,13 +69,46 @@ namespace WinSCPSync
             }
 
         }
+
+        public void Pull()
+        {
+            try
+            {
+                _logger.Info("Beginning periodic local directory refresh");
+                using (Session session = new Session())
+                {
+                    byte[] pw = new byte[Options.Password.Length];
+                    Options.Password.CopyTo(pw, 0);
+                    ProtectedMemory.Unprotect(pw, MemoryProtectionScope.SameProcess);
+                    SessionOptions options = new SessionOptions
+                    {
+                        UserName = Options.Username,
+                        Password = Encoding.UTF8.GetString(pw),
+                        HostName = Options.Hostname,
+                        PortNumber = 443,
+                        Protocol = Protocol.Webdav,
+                        WebdavSecure = true
+                    };
+
+                    session.FileTransferred += ResultHandler;
+                    session.Open(options);
+                    SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Local,
+                                                    Options.LocalDirectory, Options.RemoteDirectory, false);
+                }
+            } catch (SessionException e)
+            {
+                _logger.Debug(e.ToString());
+                throw;
+            }
+        }
         private static void ResultHandler(object sender, TransferEventArgs e)
         {
             LogWriter logger = HostLogger.Get<Synchronizer>();
 
             if (e.Error == null)
             {
-                logger.Info("File sync complete!");
+                logger.Info(String.Format("Synchronization of file {0} from {1} directory is complete!", 
+                    e.FileName, e.Side.ToString()));
             }
             else
             {
