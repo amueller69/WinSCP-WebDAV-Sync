@@ -1,41 +1,14 @@
-﻿using Topshelf;
-using NLog;
-using System;
-using System.Configuration;
+using WinSCPSync;
 
-namespace WinSCPSync
-{
-    class Program
+IHost host = Host.CreateDefaultBuilder(args)
+    .UseWindowsService(options =>
     {
-        static void Main(string[] args)
-        {
-            string path = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)
-                .FilePath;
-            LogManager.LoadConfiguration(path);
-            var factory = new LogFactory(LogManager.Configuration);
-            var logger = factory.GetCurrentClassLogger();
-            logger.Debug("Loaded Config");
-            var hf = HostFactory.Run(x =>
-            {
-                x.Service<SyncService>(service =>
-                {
-                    service.ConstructUsing(name => new SyncService());
-                    service.WhenStarted((svc, hc)=> svc.Start(hc));
-                    service.WhenStopped(svc => svc.Stop());
-                    logger.Debug("Init service");
-                });
+        options.ServiceName = "WinSCPSyncSvc";
+    })
+    .ConfigureServices(services =>
+    {
+        services.AddHostedService<SyncService>();
+    })
+    .Build();
 
-                x.RunAsLocalSystem();
-                x.SetDescription("WinSCP WebDAV Synchronization Service");
-                x.SetDisplayName("WinSCPSyncSvc");
-                x.SetServiceName("WinSCPSyncSvc");
-                x.UseNLog(factory);
-                logger.Debug("Configured service host");
-            });
-
-            var exitCode = (int)Convert.ChangeType(hf, hf.GetTypeCode());
-            Environment.ExitCode = exitCode;
-        }
-    }
-}
-
+await host.RunAsync();

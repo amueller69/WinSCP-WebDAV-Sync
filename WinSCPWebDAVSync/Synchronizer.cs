@@ -1,9 +1,7 @@
-﻿using WinSCP;
-using System;
+using WinSCP;
 using System.Text;
 using System.Collections.Generic;
-using System.Security.Cryptography;
-using Topshelf.Logging;
+using Microsoft.Extensions.Logging;
 
 namespace WinSCPSync
 {
@@ -16,23 +14,20 @@ namespace WinSCPSync
     class Synchronizer : ISynchronizer
     {
         public SynchronizerOptions Options { get; set; }
-        private LogWriter _logger;
+        private readonly ILogger<Synchronizer> _logger;
 
-        public Synchronizer(IDictionary<string, string> options)
+        public Synchronizer(IDictionary<string, string> options, ILogger<Synchronizer> logger)
         {
-            _logger = HostLogger.Get<Synchronizer>();
-            string temp;
-            byte[] bytes = Encoding.UTF8.GetBytes(options["Password"]);
-            ProtectedMemory.Protect(bytes, MemoryProtectionScope.SameProcess);
+            _logger = logger;
             Options = new SynchronizerOptions
             {
                 Username = options["Username"],
-                Password = bytes,
+                Password = Encoding.UTF8.GetBytes(options["Password"]),
                 Hostname = options["Hostname"],
                 LocalDirectory = options["LocalDirectory"],
-                RemoteDirectory = (options.TryGetValue("RemoteDirectory", out temp) == true) ? temp : "/"
+                RemoteDirectory = options.TryGetValue("RemoteDirectory", out string? temp) ? temp : "/"
             };
-            _logger.Info("Performing initial synchronization task");
+            _logger.LogInformation("Performing initial synchronization task");
             Push();
         }
 
@@ -40,80 +35,70 @@ namespace WinSCPSync
         {
             try
             {
-                _logger.Info(string.Format("Beginning synchronization of {0}", Options.LocalDirectory));
-                using (Session session = new Session())
+                _logger.LogInformation("Beginning synchronization of {Directory}", Options.LocalDirectory);
+                using Session session = new Session();
+                byte[] pw = new byte[Options.Password.Length];
+                Options.Password.CopyTo(pw, 0);
+                SessionOptions sessionOptions = new SessionOptions
                 {
-                    byte[] pw = new byte[Options.Password.Length];
-                    Options.Password.CopyTo(pw, 0);
-                    ProtectedMemory.Unprotect(pw, MemoryProtectionScope.SameProcess);
-                    SessionOptions options = new SessionOptions
-                    {
-                        UserName = Options.Username,
-                        Password = Encoding.UTF8.GetString(pw),
-                        HostName = Options.Hostname,
-                        PortNumber = 443,
-                        Protocol = Protocol.Webdav,
-                        WebdavSecure = true
-                    };
+                    UserName = Options.Username,
+                    Password = Encoding.UTF8.GetString(pw),
+                    HostName = Options.Hostname,
+                    PortNumber = 443,
+                    Protocol = Protocol.Webdav,
+                    Secure = true
+                };
+                Array.Clear(pw, 0, pw.Length);
 
-                    session.FileTransferred += ResultHandler;
-                    session.Open(options);
-                    SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Remote,
-                        Options.LocalDirectory, Options.RemoteDirectory, false);
-                }
+                session.FileTransferred += ResultHandler;
+                session.Open(sessionOptions);
+                session.SynchronizeDirectories(SynchronizationMode.Remote,
+                    Options.LocalDirectory, Options.RemoteDirectory, false);
             }
             catch (SessionException e)
             {
-                _logger.Debug(e.ToString());
+                _logger.LogDebug(e, "Session exception during Push");
                 throw;
             }
-
         }
 
         public void Pull()
         {
             try
             {
-                _logger.Info("Beginning periodic local directory refresh");
-                using (Session session = new Session())
+                _logger.LogInformation("Beginning periodic local directory refresh");
+                using Session session = new Session();
+                byte[] pw = new byte[Options.Password.Length];
+                Options.Password.CopyTo(pw, 0);
+                SessionOptions sessionOptions = new SessionOptions
                 {
-                    byte[] pw = new byte[Options.Password.Length];
-                    Options.Password.CopyTo(pw, 0);
-                    ProtectedMemory.Unprotect(pw, MemoryProtectionScope.SameProcess);
-                    SessionOptions options = new SessionOptions
-                    {
-                        UserName = Options.Username,
-                        Password = Encoding.UTF8.GetString(pw),
-                        HostName = Options.Hostname,
-                        PortNumber = 443,
-                        Protocol = Protocol.Webdav,
-                        WebdavSecure = true
-                    };
+                    UserName = Options.Username,
+                    Password = Encoding.UTF8.GetString(pw),
+                    HostName = Options.Hostname,
+                    PortNumber = 443,
+                    Protocol = Protocol.Webdav,
+                    Secure = true
+                };
+                Array.Clear(pw, 0, pw.Length);
 
-                    session.FileTransferred += ResultHandler;
-                    session.Open(options);
-                    SynchronizationResult result = session.SynchronizeDirectories(SynchronizationMode.Local,
-                                                    Options.LocalDirectory, Options.RemoteDirectory, false);
-                }
-            } catch (SessionException e)
+                session.FileTransferred += ResultHandler;
+                session.Open(sessionOptions);
+                session.SynchronizeDirectories(SynchronizationMode.Local,
+                    Options.LocalDirectory, Options.RemoteDirectory, false);
+            }
+            catch (SessionException e)
             {
-                _logger.Debug(e.ToString());
+                _logger.LogDebug(e, "Session exception during Pull");
                 throw;
             }
         }
-        private static void ResultHandler(object sender, TransferEventArgs e)
-        {
-            LogWriter logger = HostLogger.Get<Synchronizer>();
 
+        private void ResultHandler(object? sender, TransferEventArgs e)
+        {
             if (e.Error == null)
-            {
-                logger.Info(String.Format("Synchronization of file {0} from {1} directory is complete!", 
-                    e.FileName, e.Side.ToString()));
-            }
+                _logger.LogInformation("Synchronization of file {FileName} from {Side} directory is complete!", e.FileName, e.Side);
             else
-            {
-                logger.Error(String.Format("Upload of {0} failed: {1}", e.FileName, e.Error));
-            }
+                _logger.LogError("Synchronization of {FileName} failed: {Error}", e.FileName, e.Error);
         }
     }
 }

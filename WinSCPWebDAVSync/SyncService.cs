@@ -1,123 +1,106 @@
-﻿using System;
-using WinSCP;
-using System.Linq;
-using System.Text;
-using System.Configuration;
-using System.Threading;
-using System.Collections.Generic;
 using System.Security.Cryptography;
-using Topshelf.Logging;
-using Topshelf;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using WinSCP;
 
 namespace WinSCPSync
 {
-    class SyncService
+    public class SyncService : BackgroundService
     {
-        private DirectoryMonitor _monitor;
-        private Thread _thread;
-        private LogWriter _logger;
-        private HostControl _control;
+        private readonly ILogger<SyncService> _logger;
+        private readonly IConfiguration _configuration;
+        private readonly ILoggerFactory _loggerFactory;
 
-        public SyncService()
+        public SyncService(ILogger<SyncService> logger, IConfiguration configuration, ILoggerFactory loggerFactory)
         {
-            _logger = HostLogger.Get<SyncService>();
-            _logger.Debug("Began SyncService init");
+            _logger = logger;
+            _configuration = configuration;
+            _loggerFactory = loggerFactory;
         }
 
-        public bool Start(HostControl control)
-        {
-            _control = control;
-            _thread = new Thread(RunService);
-            _thread.IsBackground = true;
-            _thread.Start();
-            _logger.Info("Starting service");
-            return true;
-        }
-
-        public bool Stop()
-        {
-            _logger.Info("Stopping service");
-            if (_monitor != null)
-            {
-            _monitor.StopMonitoring();
-            }
-            return true;
-        }
-
-        private void RunService()
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             try
             {
-                var hasSecret = ConfigurationManager.AppSettings
-                    .OfType<string>()
-                    .Any(x => x.Equals("Secret"));
+                string password = GetDecryptedPassword();
+                var settings = _configuration.GetSection("AppSettings");
 
-                if (!hasSecret || string.IsNullOrEmpty(ConfigurationManager.AppSettings["Secret"]))
+                var configDict = new Dictionary<string, string>
                 {
-                    InitializeConfig(hasSecret);
-                }
+                    ["Username"] = settings["Username"] ?? "",
+                    ["Hostname"] = settings["Hostname"] ?? "",
+                    ["Password"] = password,
+                    ["LocalDirectory"] = settings["LocalDirectory"] ?? "",
+                    ["RemoteDirectory"] = settings["RemoteDirectory"] ?? "/"
+                };
 
-                var configDict = ConfigurationManager.AppSettings.AllKeys
-                    .ToDictionary(key => key, key => ConfigurationManager.AppSettings[key]);
-                byte[] entropy = DecryptValue(configDict["Secret"], null);
-                byte[] bytes = DecryptValue(configDict["Password"], entropy);
-                configDict["Password"] = Encoding.UTF8.GetString(bytes);
-                var _sync = new Synchronizer(configDict);
-                _monitor = new DirectoryMonitor(configDict["LocalDirectory"], _sync);
-                _logger.Debug("Sync Service object init end");
-                _monitor.StartMonitoring();
-            } catch (CryptographicException ex)
+                var sync = new Synchronizer(configDict, _loggerFactory.CreateLogger<Synchronizer>());
+                var monitor = new DirectoryMonitor(configDict["LocalDirectory"], sync, _loggerFactory.CreateLogger<DirectoryMonitor>());
+                _logger.LogDebug("Sync service initialized");
+
+                await monitor.StartMonitoring(stoppingToken);
+            }
+            catch (CryptographicException ex)
             {
-                _logger.Debug(ex);
-                _logger.Error("Could not decrypt password. Clear the secret value and replace the password value in " +
-                    "the config file in order to re-encrpyt password on next run.");
-                _control.Stop();
-            } catch (SessionException)
+                _logger.LogError(ex, "Could not decrypt password. Clear the Secret value and replace the Password value in appsettings.json to re-encrypt on next run.");
+            }
+            catch (SessionException)
             {
-                _logger.Error("Failed to initialize connection to remote host. Verify config information");
-                _control.Stop();
+                _logger.LogError("Failed to initialize connection to remote host. Verify config information in appsettings.json.");
             }
         }
 
-        private static void InitializeConfig(bool hasSecret)
+        private string GetDecryptedPassword()
         {
-            var config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
-            var secret = new byte[32];
-            using (var random = new RNGCryptoServiceProvider())
+            var settings = _configuration.GetSection("AppSettings");
+            string? secretEncrypted = settings["Secret"];
+
+            if (string.IsNullOrEmpty(secretEncrypted))
             {
-                random.GetBytes(secret);
+                // First run: encrypt the plaintext password and save it back to appsettings.json
+                string configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+                string json = File.ReadAllText(configPath);
+                var doc = JsonNode.Parse(json)!;
+                var appSettings = doc["AppSettings"]!.AsObject();
+
+                string plainPassword = appSettings["Password"]!.GetValue<string>();
+                byte[] secret = RandomNumberGenerator.GetBytes(32);
+                byte[] passwordBytes = Encoding.UTF8.GetBytes(plainPassword);
+
+                string encryptedPassword = EncryptValue(passwordBytes, secret);
+                string encryptedSecret = EncryptValue(secret, null);
+                Array.Clear(passwordBytes, 0, passwordBytes.Length);
+                Array.Clear(secret, 0, secret.Length);
+
+                appSettings["Secret"] = encryptedSecret;
+                appSettings["Password"] = encryptedPassword;
+                File.WriteAllText(configPath, doc.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+
+                _logger.LogInformation("Password encrypted and saved to configuration.");
+                return plainPassword;
             }
 
-            byte[] bytes = Encoding.UTF8.GetBytes(ConfigurationManager.AppSettings.Get("Password"));
-            string encrypted = EncryptValue(bytes, secret);
-            Array.Clear(bytes, 0, bytes.Length);
-            string encryptedSecret = EncryptValue(secret, null);
-            if (!hasSecret)
-            {
-                config.AppSettings.Settings.Add("Secret", encryptedSecret);
-            } else
-            {
-                config.AppSettings.Settings["Secret"].Value = encryptedSecret;
-            }
-            config.AppSettings.Settings["Password"].Value = encrypted;
-            config.Save(ConfigurationSaveMode.Modified);
-            ConfigurationManager.RefreshSection("appSettings");
+            byte[] entropy = DecryptValue(secretEncrypted, null);
+            byte[] bytes = DecryptValue(settings["Password"]!, entropy);
+            return Encoding.UTF8.GetString(bytes);
         }
 
-        private static string EncryptValue(byte[] unencrypted, byte[] entropy)
+        private static string EncryptValue(byte[] unencrypted, byte[]? entropy)
         {
             byte[] encrypted = ProtectedData.Protect(unencrypted, entropy, DataProtectionScope.LocalMachine);
             return BitConverter.ToString(encrypted).Replace("-", string.Empty);
         }
 
-
-        private static byte[] DecryptValue(string encrypted, byte[] entropy)
+        private static byte[] DecryptValue(string encrypted, byte[]? entropy)
         {
-            IEnumerable<int> range = Enumerable.Range(0, encrypted.Length / 2);
-            byte[] byteArray = range.Select(x => Convert.ToByte(encrypted.Substring(x * 2, 2), 16)).ToArray();
+            byte[] byteArray = Enumerable.Range(0, encrypted.Length / 2)
+                .Select(x => Convert.ToByte(encrypted.Substring(x * 2, 2), 16))
+                .ToArray();
             return ProtectedData.Unprotect(byteArray, entropy, DataProtectionScope.LocalMachine);
         }
-
-
     }
 }

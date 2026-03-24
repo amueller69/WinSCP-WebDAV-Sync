@@ -1,85 +1,78 @@
-﻿using System;
-using WinSCP;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Topshelf.Logging;
+using Microsoft.Extensions.Logging;
+using WinSCP;
 
 namespace WinSCPSync
 {
-    class DirectoryMonitor {
+    class DirectoryMonitor
+    {
         public string Directory { get; }
-        public Boolean HasChanged { get; set; } = false;
-        private ISynchronizer _synchronizer;
-        private FileSystemWatcher _monitor;
-        private CancellationTokenSource _canceler;
-        private bool _watching = true;
+        public bool HasChanged { get; set; } = false;
+        private readonly ISynchronizer _synchronizer;
+        private readonly FileSystemWatcher _monitor;
         private DateTime _last_refresh;
-        private readonly LogWriter _logger;
+        private readonly ILogger<DirectoryMonitor> _logger;
 
-
-        public DirectoryMonitor(string filepath, ISynchronizer sync)
+        public DirectoryMonitor(string filepath, ISynchronizer sync, ILogger<DirectoryMonitor> logger)
         {
             Directory = filepath;
             _synchronizer = sync;
-            _canceler = new CancellationTokenSource();
-            _logger = HostLogger.Get<DirectoryMonitor>();
+            _logger = logger;
             _last_refresh = DateTime.MinValue;
             _monitor = new FileSystemWatcher(filepath)
             {
                 IncludeSubdirectories = true,
-                NotifyFilter = (
-                    NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName
-                )
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.DirectoryName
             };
-
-            _monitor.Changed += new FileSystemEventHandler(OnChange);
+            _monitor.Changed += OnChange;
         }
 
         private void OnChange(object source, FileSystemEventArgs e)
         {
             if (!HasChanged)
             {
-                _logger.Info("Change detected! Directory marked for immediate synchronization.");
+                _logger.LogInformation("Change detected! Directory marked for immediate synchronization.");
                 HasChanged = true;
             }
         }
 
-        public async void StartMonitoring()
+        public async Task StartMonitoring(CancellationToken cancellationToken)
         {
             try
             {
                 _monitor.EnableRaisingEvents = true;
-                while (_watching)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    if (TimeSpan.FromTicks(DateTime.Now.Ticks -_last_refresh.Ticks) > TimeSpan.FromMinutes(30))
+                    if (DateTime.Now - _last_refresh > TimeSpan.FromMinutes(30))
                     {
-                        await Task.Run(_synchronizer.Pull, _canceler.Token);
+                        await Task.Run(_synchronizer.Pull, cancellationToken);
                         _last_refresh = DateTime.Now;
                     }
 
                     if (HasChanged)
                     {
-                        await Task.Run(_synchronizer.Push, _canceler.Token);
+                        await Task.Run(_synchronizer.Push, cancellationToken);
                         HasChanged = false;
                     }
-                    await Task.Delay(60000, _canceler.Token);
+
+                    await Task.Delay(60000, cancellationToken);
                 }
-            } catch (TaskCanceledException)
+            }
+            catch (TaskCanceledException)
             {
-                _logger.Warn("Task cancelled!");
-            } catch (SessionException)
+                _logger.LogWarning("Monitoring task cancelled.");
+            }
+            catch (SessionException)
             {
-                _logger.Error("File sync task failed due to server connection or authentication issue");
+                _logger.LogError("File sync task failed due to server connection or authentication issue.");
+            }
+            finally
+            {
+                _monitor.EnableRaisingEvents = false;
             }
         }
-
-        public void StopMonitoring()
-        {
-            _canceler.Cancel();
-            _watching = false;
-            _monitor.EnableRaisingEvents = false;
-        } 
-
     }
 }
