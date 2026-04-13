@@ -37,6 +37,7 @@ namespace WinSCPSync
             {
                 _logger.LogInformation("Beginning synchronization of {Directory}", Options.LocalDirectory);
                 using Session session = new Session();
+                session.ExecutablePath = Path.Combine(AppContext.BaseDirectory, "WinSCP.exe");
                 byte[] pw = new byte[Options.Password.Length];
                 Options.Password.CopyTo(pw, 0);
                 SessionOptions sessionOptions = new SessionOptions
@@ -68,6 +69,7 @@ namespace WinSCPSync
             {
                 _logger.LogInformation("Beginning periodic local directory refresh");
                 using Session session = new Session();
+                session.ExecutablePath = Path.Combine(AppContext.BaseDirectory, "WinSCP.exe");
                 byte[] pw = new byte[Options.Password.Length];
                 Options.Password.CopyTo(pw, 0);
                 SessionOptions sessionOptions = new SessionOptions
