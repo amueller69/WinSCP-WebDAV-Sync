@@ -42,19 +42,21 @@ dotnet build
 
 ## Installing as a Windows Service
 
-From an **elevated** (Administrator) command prompt, navigate to the published output directory and run:
+From an **elevated** (Administrator) PowerShell or command prompt, run:
 
+```powershell
+sc.exe create WinSCPSyncSvc binPath= "C:\path\to\WinSCPSync.exe" start= auto
+sc.exe description WinSCPSyncSvc "WinSCP WebDAV Synchronization Service"
+sc.exe start WinSCPSyncSvc
 ```
-sc create WinSCPSyncSvc binPath= "C:\path\to\WinSCPSync.exe" start= auto
-sc description WinSCPSyncSvc "WinSCP WebDAV Synchronization Service"
-sc start WinSCPSyncSvc
-```
+
+> **Note:** Use `sc.exe` explicitly in PowerShell, as `sc` is aliased to `Set-Content`.
 
 To uninstall:
 
-```
-sc stop WinSCPSyncSvc
-sc delete WinSCPSyncSvc
+```powershell
+sc.exe stop WinSCPSyncSvc
+sc.exe delete WinSCPSyncSvc
 ```
 
 ## Logs
