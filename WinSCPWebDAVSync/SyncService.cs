@@ -48,9 +48,9 @@ namespace WinSCPSync
             {
                 _logger.LogError(ex, "Could not decrypt password. Clear the Secret value and replace the Password value in appsettings.json to re-encrypt on next run.");
             }
-            catch (SessionException)
+            catch (SessionException ex)
             {
-                _logger.LogError("Failed to initialize connection to remote host. Verify config information in appsettings.json.");
+                _logger.LogError(ex, "Failed to initialize connection to remote host. Verify config information in appsettings.json.");
             }
         }
 

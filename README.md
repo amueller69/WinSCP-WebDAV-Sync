@@ -45,12 +45,14 @@ dotnet build
 From an **elevated** (Administrator) PowerShell or command prompt, run:
 
 ```powershell
-sc.exe create WinSCPSyncSvc binPath= "C:\path\to\WinSCPSync.exe" start= auto
+sc.exe create WinSCPSyncSvc binPath= "C:\path\to\WinSCPSync.exe" start= delayed-auto
 sc.exe description WinSCPSyncSvc "WinSCP WebDAV Synchronization Service"
 sc.exe start WinSCPSyncSvc
 ```
 
-> **Note:** Use `sc.exe` explicitly in PowerShell, as `sc` is aliased to `Set-Content`.
+> **Note:** `delayed-auto` causes the service to start a couple of minutes after boot, giving the network stack time to initialize before the first sync attempt. If you use `auto` instead, the service may fail on startup with a DNS resolution error.
+
+> **Note:** Use `sc.exe` explicitly in PowerShell — `sc` is aliased to `Set-Content`. Also avoid `Set-Service` for startup type changes in PowerShell 5.1, as it does not support `AutomaticDelayedStart`; use `sc.exe config` instead.
 
 To uninstall:
 

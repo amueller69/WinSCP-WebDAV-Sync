@@ -65,9 +65,9 @@ namespace WinSCPSync
             {
                 _logger.LogWarning("Monitoring task cancelled.");
             }
-            catch (SessionException)
+            catch (SessionException ex)
             {
-                _logger.LogError("File sync task failed due to server connection or authentication issue.");
+                _logger.LogError(ex, "File sync task failed due to server connection or authentication issue.");
             }
             finally
             {
